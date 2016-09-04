@@ -58,6 +58,8 @@ private:
     void computeGaussianPerplexity(double* X, int N, int D, unsigned int** _row_P, unsigned int** _col_P, double** _val_P, double perplexity, int K);
     void computeSquaredEuclideanDistance(double* X, int N, int D, double* DD);
     double randn();
+    long millis();
+    float secondsFrom(long startMillis);
 };
 
 #endif

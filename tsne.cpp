@@ -38,6 +38,7 @@
 #include <stdio.h>
 #include <cstring>
 #include <time.h>
+#include <sys/time.h>
 #include "vptree.h"
 #include "sptree.h"
 #include "tsne.h"
@@ -70,6 +71,8 @@ void TSNE::run(double* X, int N, int D, double* Y, int no_dims, double perplexit
     clock_t start, end;
 	double momentum = .5, final_momentum = .8;
 	double eta = 200.0;
+    long start_millis;
+    long total_start_millis;
 
     // Allocate some memory
     double* dY    = (double*) malloc(N * no_dims * sizeof(double));
@@ -82,6 +85,8 @@ void TSNE::run(double* X, int N, int D, double* Y, int no_dims, double perplexit
     // Normalize input data (to prevent numerical problems)
     printf("Computing input similarities...\n");
     start = clock();
+    start_millis = millis();
+    total_start_millis = millis();
     zeroMean(X, N, D);
     double max_X = .0;
     for(int i = 0; i < N * D; i++) {
@@ -140,9 +145,10 @@ void TSNE::run(double* X, int N, int D, double* Y, int no_dims, double perplexit
   }
 
 	// Perform main training loop
-    if(exact) printf("Input similarities computed in %4.2f seconds!\nLearning embedding...\n", (float) (end - start) / CLOCKS_PER_SEC);
-    else printf("Input similarities computed in %4.2f seconds (sparsity = %f)!\nLearning embedding...\n", (float) (end - start) / CLOCKS_PER_SEC, (double) row_P[N] / ((double) N * (double) N));
+    if(exact) printf("Input similarities computed in %4.2f seconds!\nLearning embedding...\n", secondsFrom(start_millis));
+    else printf("Input similarities computed in %4.2f seconds (sparsity = %f)!\nLearning embedding...\n", secondsFrom(start_millis), (double) row_P[N] / ((double) N * (double) N));
     start = clock();
+    start_millis = millis();
 
 	for(int iter = 0; iter < max_iter; iter++) {
 
@@ -178,9 +184,10 @@ void TSNE::run(double* X, int N, int D, double* Y, int no_dims, double perplexit
                 printf("Iteration %d: error is %f\n", iter + 1, C);
             else {
                 total_time += (float) (end - start) / CLOCKS_PER_SEC;
-                printf("Iteration %d: error is %f (50 iterations in %4.2f seconds)\n", iter, C, (float) (end - start) / CLOCKS_PER_SEC);
+                printf("Iteration %d: error is %f (50 iterations in %4.2f seconds)\n", iter, C, secondsFrom(start_millis));
             }
 			start = clock();
+            start_millis = millis();
         }
     }
     end = clock(); total_time += (float) (end - start) / CLOCKS_PER_SEC;
@@ -195,9 +202,18 @@ void TSNE::run(double* X, int N, int D, double* Y, int no_dims, double perplexit
         free(col_P); col_P = NULL;
         free(val_P); val_P = NULL;
     }
-    printf("Fitting performed in %4.2f seconds.\n", total_time);
+    printf("Fitting performed in %4.2f seconds.\n", secondsFrom(total_start_millis));
 }
 
+long TSNE::millis() {
+    struct timeval tp;
+    gettimeofday(&tp, NULL);
+    return tp.tv_sec * 1000 + tp.tv_usec / 1000;
+}
+
+float TSNE::secondsFrom(long start_millis) {
+    return (millis() - start_millis) / 1000.0f;
+}
 
 // Compute gradient of the t-SNE cost function (using Barnes-Hut algorithm)
 void TSNE::computeGradient(double* P, unsigned int* inp_row_P, unsigned int* inp_col_P, double* inp_val_P, double* Y, int N, int D, double* dC, double theta)
