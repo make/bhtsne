@@ -171,7 +171,6 @@ void SPTree::init(SPTree* inp_parent, unsigned int D, double* inp_data, double* 
     center_of_mass = (double*) malloc(D * sizeof(double));
     for(unsigned int d = 0; d < D; d++) center_of_mass[d] = .0;
     
-    buff = (double*) malloc(D * sizeof(double));
 }
 
 
@@ -183,7 +182,6 @@ SPTree::~SPTree()
     }
     free(children);
     free(center_of_mass);
-    free(buff);
     delete boundary;
 }
 
@@ -338,17 +336,16 @@ unsigned int SPTree::getDepth() {
 
 
 // Compute non-edge forces using Barnes-Hut algorithm
-void SPTree::computeNonEdgeForces(unsigned int point_index, double theta, double neg_f[], double* sum_Q)
+double SPTree::computeNonEdgeForces(unsigned int point_index, double theta, double neg_f[])
 {
-    
     // Make sure that we spend no time on empty nodes or self-interactions
-    if(cum_size == 0 || (is_leaf && size == 1 && index[0] == point_index)) return;
+    double Q = .0;
+    if(cum_size == 0 || (is_leaf && size == 1 && index[0] == point_index)) return Q;
     
     // Compute distance between point and center-of-mass
     double D = .0;
     unsigned int ind = point_index * dimension;
-    for(unsigned int d = 0; d < dimension; d++) buff[d] = data[ind + d] - center_of_mass[d];
-    for(unsigned int d = 0; d < dimension; d++) D += buff[d] * buff[d];
+    for(unsigned int d = 0; d < dimension; d++) D += (data[ind + d] - center_of_mass[d]) * (data[ind + d] - center_of_mass[d]);
     
     // Check whether we can use this node as a "summary"
     double max_width = 0.0;
@@ -361,16 +358,16 @@ void SPTree::computeNonEdgeForces(unsigned int point_index, double theta, double
     
         // Compute and add t-SNE force between point and current node
         D = 1.0 / (1.0 + D);
-        double mult = cum_size * D;
-        *sum_Q += mult;
-        mult *= D;
-        for(unsigned int d = 0; d < dimension; d++) neg_f[d] += mult * buff[d];
+        Q = cum_size * D;
+        double mult = Q * D;
+        for(unsigned int d = 0; d < dimension; d++) neg_f[d] += mult * (data[ind + d] - center_of_mass[d]);
     }
     else {
 
         // Recursively apply Barnes-Hut to children
-        for(unsigned int i = 0; i < no_children; i++) children[i]->computeNonEdgeForces(point_index, theta, neg_f, sum_Q);
+        for(unsigned int i = 0; i < no_children; i++) Q += children[i]->computeNonEdgeForces(point_index, theta, neg_f);
     }
+    return Q;
 }
 
 
@@ -388,12 +385,11 @@ void SPTree::computeEdgeForces(unsigned int* row_P, unsigned int* col_P, double*
             // Compute pairwise distance and Q-value
             D = 1.0;
             ind2 = col_P[i] * dimension;
-            for(unsigned int d = 0; d < dimension; d++) buff[d] = data[ind1 + d] - data[ind2 + d];
-            for(unsigned int d = 0; d < dimension; d++) D += buff[d] * buff[d];
+            for(unsigned int d = 0; d < dimension; d++) D += (data[ind1 + d] - data[ind2 + d]) * (data[ind1 + d] - data[ind2 + d]);
             D = val_P[i] / D;
             
             // Sum positive force
-            for(unsigned int d = 0; d < dimension; d++) pos_f[ind1 + d] += D * buff[d];
+            for(unsigned int d = 0; d < dimension; d++) pos_f[ind1 + d] += D * (data[ind1 + d] - data[ind2 + d]);
         }
         ind1 += dimension;
     }

@@ -42,6 +42,7 @@
 #include "vptree.h"
 #include "sptree.h"
 #include "tsne.h"
+#include "omp.h"
 
 
 using namespace std;
@@ -228,7 +229,8 @@ void TSNE::computeGradient(double* P, unsigned int* inp_row_P, unsigned int* inp
     double* neg_f = (double*) calloc(N * D, sizeof(double));
     if(pos_f == NULL || neg_f == NULL) { printf("Memory allocation failed!\n"); exit(1); }
     tree->computeEdgeForces(inp_row_P, inp_col_P, inp_val_P, N, pos_f);
-    for(int n = 0; n < N; n++) tree->computeNonEdgeForces(n, theta, neg_f + n * D, &sum_Q);
+    #pragma omp parallel for reduction(+:sum_Q)
+    for(int n = 0; n < N; n++) sum_Q += tree->computeNonEdgeForces(n, theta, neg_f + n * D);
 
     // Compute final t-SNE gradient
     for(int i = 0; i < N * D; i++) {
@@ -333,7 +335,8 @@ double TSNE::evaluateError(unsigned int* row_P, unsigned int* col_P, double* val
     SPTree* tree = new SPTree(D, Y, N);
     double* buff = (double*) calloc(D, sizeof(double));
     double sum_Q = .0;
-    for(int n = 0; n < N; n++) tree->computeNonEdgeForces(n, theta, buff, &sum_Q);
+    #pragma omp parallel for reduction(+:sum_Q)
+    for(int n = 0; n < N; n++) sum_Q += tree->computeNonEdgeForces(n, theta, buff);
 
     // Loop over all edges to compute t-SNE error
     int ind1, ind2;
@@ -383,6 +386,7 @@ void TSNE::computeGaussianPerplexity(double* X, int N, int D, double* P, double 
 		while(!found && iter < 200) {
 
 			// Compute Gaussian kernel row
+			#pragma omp parallel for
 			for(int m = 0; m < N; m++) P[nN + m] = exp(-beta * DD[nN + m]);
 			P[nN + n] = DBL_MIN;
 
@@ -434,6 +438,7 @@ void TSNE::computeGaussianPerplexity(double* X, int N, int D, unsigned int** _ro
 
     if(perplexity > K) printf("Perplexity should be lower than K!\n");
 
+    long start_millis = millis();
     // Allocate the memory we need
     *_row_P = (unsigned int*)    malloc((N + 1) * sizeof(unsigned int));
     *_col_P = (unsigned int*)    calloc(N * K, sizeof(unsigned int));
@@ -442,24 +447,34 @@ void TSNE::computeGaussianPerplexity(double* X, int N, int D, unsigned int** _ro
     unsigned int* row_P = *_row_P;
     unsigned int* col_P = *_col_P;
     double* val_P = *_val_P;
-    double* cur_P = (double*) malloc((N - 1) * sizeof(double));
-    if(cur_P == NULL) { printf("Memory allocation failed!\n"); exit(1); }
     row_P[0] = 0;
     for(int n = 0; n < N; n++) row_P[n + 1] = row_P[n] + (unsigned int) K;
 
-    // Build ball tree on data set
-    VpTree<DataPoint, euclidean_distance>* tree = new VpTree<DataPoint, euclidean_distance>();
     vector<DataPoint> obj_X(N, DataPoint(D, -1, X));
     for(int n = 0; n < N; n++) obj_X[n] = DataPoint(D, n, X + n * D);
-    tree->create(obj_X);
 
     // Loop over all points to find nearest neighbors
     printf("Building tree...\n");
-    vector<DataPoint> indices;
-    vector<double> distances;
+    double lp = log(perplexity);
+    int maxThreads = omp_get_max_threads();
+    printf("[%4.2f s] Max Threads: %d\n", secondsFrom(start_millis), maxThreads);
+    #pragma omp parallel for
+    for(int t = 0; t < maxThreads; t++) {
+        // Build ball tree on data set
+        VpTree<DataPoint, euclidean_distance>* tree = new VpTree<DataPoint, euclidean_distance>();
+        tree->create(obj_X);
+        double* cur_P = (double*) malloc((N - 1) * sizeof(double));
+        if(cur_P == NULL) {
+          printf("Memory allocation failed!\n");
+          exit(1);
+        }
+        vector<DataPoint> indices;
+        vector<double> distances;
     for(int n = 0; n < N; n++) {
 
-        if(n % 10000 == 0) printf(" - point %d of %d\n", n, N);
+        if(n % maxThreads != t) continue;
+
+        if(n % 10000 == 0) printf("[%4.2f s] - point %d of %d\n", secondsFrom(start_millis), n, N);
 
         // Find nearest neighbors
         indices.clear();
@@ -520,11 +535,12 @@ void TSNE::computeGaussianPerplexity(double* X, int N, int D, unsigned int** _ro
             val_P[row_P[n] + m] = cur_P[m];
         }
     }
+        // Clean up memory
+        free(cur_P);
+        delete tree;
+        obj_X.clear();
+    }
 
-    // Clean up memory
-    obj_X.clear();
-    free(cur_P);
-    delete tree;
 }
 
 
