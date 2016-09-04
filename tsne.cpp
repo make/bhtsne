@@ -69,10 +69,10 @@ void TSNE::run(double* X, int N, int D, double* Y, int no_dims, double perplexit
 
     // Set learning parameters
     float total_time = .0;
-    clock_t start, end;
 	double momentum = .5, final_momentum = .8;
 	double eta = 200.0;
     long start_millis;
+    float seconds;
     long total_start_millis;
 
     // Allocate some memory
@@ -85,7 +85,6 @@ void TSNE::run(double* X, int N, int D, double* Y, int no_dims, double perplexit
 
     // Normalize input data (to prevent numerical problems)
     printf("Computing input similarities...\n");
-    start = clock();
     start_millis = millis();
     total_start_millis = millis();
     zeroMean(X, N, D);
@@ -134,7 +133,7 @@ void TSNE::run(double* X, int N, int D, double* Y, int no_dims, double perplexit
         for(int i = 0; i < row_P[N]; i++) sum_P += val_P[i];
         for(int i = 0; i < row_P[N]; i++) val_P[i] /= sum_P;
     }
-    end = clock();
+    seconds = secondsFrom(start_millis);
 
     // Lie about the P-values
     if(exact) { for(int i = 0; i < N * N; i++)        P[i] *= 12.0; }
@@ -146,9 +145,8 @@ void TSNE::run(double* X, int N, int D, double* Y, int no_dims, double perplexit
   }
 
 	// Perform main training loop
-    if(exact) printf("Input similarities computed in %4.2f seconds!\nLearning embedding...\n", secondsFrom(start_millis));
-    else printf("Input similarities computed in %4.2f seconds (sparsity = %f)!\nLearning embedding...\n", secondsFrom(start_millis), (double) row_P[N] / ((double) N * (double) N));
-    start = clock();
+    if(exact) printf("Input similarities computed in %4.2f seconds!\nLearning embedding...\n", seconds);
+    else printf("Input similarities computed in %4.2f seconds (sparsity = %f)!\nLearning embedding...\n", seconds, (double) row_P[N] / ((double) N * (double) N));
     start_millis = millis();
 
 	for(int iter = 0; iter < max_iter; iter++) {
@@ -177,21 +175,20 @@ void TSNE::run(double* X, int N, int D, double* Y, int no_dims, double perplexit
 
         // Print out progress
         if (iter > 0 && (iter % 50 == 0 || iter == max_iter - 1)) {
-            end = clock();
+            seconds = secondsFrom(start_millis);
             double C = .0;
             if(exact) C = evaluateError(P, Y, N, no_dims);
             else      C = evaluateError(row_P, col_P, val_P, Y, N, no_dims, theta);  // doing approximate computation here!
             if(iter == 0)
                 printf("Iteration %d: error is %f\n", iter + 1, C);
             else {
-                total_time += (float) (end - start) / CLOCKS_PER_SEC;
-                printf("Iteration %d: error is %f (50 iterations in %4.2f seconds)\n", iter, C, secondsFrom(start_millis));
+                total_time += seconds;
+                printf("Iteration %d: error is %f (50 iterations in %4.2f seconds)\n", iter, C, seconds);
             }
-			start = clock();
             start_millis = millis();
         }
     }
-    end = clock(); total_time += (float) (end - start) / CLOCKS_PER_SEC;
+    seconds = secondsFrom(start_millis); total_time += seconds;
 
     // Clean up memory
     free(dY);
@@ -203,7 +200,7 @@ void TSNE::run(double* X, int N, int D, double* Y, int no_dims, double perplexit
         free(col_P); col_P = NULL;
         free(val_P); val_P = NULL;
     }
-    printf("Fitting performed in %4.2f seconds.\n", secondsFrom(total_start_millis));
+    printf("Fitting performed in %4.2f seconds.\n", total_time);
 }
 
 long TSNE::millis() {
