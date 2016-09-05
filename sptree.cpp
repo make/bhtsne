@@ -92,23 +92,24 @@ SPTree::SPTree(unsigned int D, double* inp_data, unsigned int N)
 {
     
     // Compute mean, width, and height of current map (boundaries of SPTree)
-    int nD = 0;
     double* mean_Y = (double*) calloc(D,  sizeof(double));
     double*  min_Y = (double*) malloc(D * sizeof(double)); for(unsigned int d = 0; d < D; d++)  min_Y[d] =  DBL_MAX;
     double*  max_Y = (double*) malloc(D * sizeof(double)); for(unsigned int d = 0; d < D; d++)  max_Y[d] = -DBL_MAX;
-    for(unsigned int n = 0; n < N; n++) {
-        for(unsigned int d = 0; d < D; d++) {
-            mean_Y[d] += inp_data[n * D + d];
+    double* width = (double*) malloc(D * sizeof(double));
+    #pragma parallel for
+    for(unsigned int d = 0; d < D; d++) {
+        int nD = 0;
+        for(unsigned int n = 0; n < N; n++) {
+            mean_Y[d] += inp_data[nD + d];
             if(inp_data[nD + d] < min_Y[d]) min_Y[d] = inp_data[nD + d];
             if(inp_data[nD + d] > max_Y[d]) max_Y[d] = inp_data[nD + d];
+            nD += D;
         }
-        nD += D;
+        mean_Y[d] /= (double) N;
+        width[d] = fmax(max_Y[d] - mean_Y[d], mean_Y[d] - min_Y[d]) + 1e-5;
     }
-    for(int d = 0; d < D; d++) mean_Y[d] /= (double) N;
     
     // Construct SPTree
-    double* width = (double*) malloc(D * sizeof(double));
-    for(int d = 0; d < D; d++) width[d] = fmax(max_Y[d] - mean_Y[d], mean_Y[d] - min_Y[d]) + 1e-5;
     init(NULL, D, inp_data, mean_Y, width);
     fill(N);
     
