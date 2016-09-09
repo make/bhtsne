@@ -86,6 +86,7 @@ def _argparse():
     argparse.add_argument('--no_pca', dest='use_pca', action='store_false')
     argparse.set_defaults(use_pca=DEFAULT_USE_PCA)
     argparse.add_argument('-m', '--max_iter', type=int, default=DEFAULT_MAX_ITERATIONS)
+    argparse.add_argument('--init', type=FileType('r'))
     return argparse
 
 
@@ -93,7 +94,7 @@ def _read_unpack(fmt, fh):
     return unpack(fmt, fh.read(calcsize(fmt)))
 
 def init_bh_tsne(samples, workdir, no_dims=DEFAULT_NO_DIMS, initial_dims=INITIAL_DIMENSIONS, perplexity=DEFAULT_PERPLEXITY,
-            theta=DEFAULT_THETA, randseed=EMPTY_SEED, verbose=False, use_pca=DEFAULT_USE_PCA, max_iter=DEFAULT_MAX_ITERATIONS):
+            theta=DEFAULT_THETA, randseed=EMPTY_SEED, verbose=False, use_pca=DEFAULT_USE_PCA, max_iter=DEFAULT_MAX_ITERATIONS, init_data=None):
 
     if use_pca:
         samples = samples - np.mean(samples, axis=0)
@@ -126,6 +127,12 @@ def init_bh_tsne(samples, workdir, no_dims=DEFAULT_NO_DIMS, initial_dims=INITIAL
         # Write random seed if specified
         if randseed != EMPTY_SEED:
             data_file.write(pack('i', randseed))
+
+    if init_data is not None:
+        with open(path_join(workdir, 'init.dat'), 'wb') as init_file:
+            # Write the initialization data
+            for sample in init_data:
+                init_file.write(pack('{}d'.format(len(sample)), *sample))
 
 def load_data(input_file):
     # Read the data, with some sanity checking
@@ -179,7 +186,7 @@ def bh_tsne(workdir, verbose=False):
         # The last piece of data is the cost for each sample, we ignore it
         #read_unpack('{}d'.format(sample_count), output_file)
 
-def run_bh_tsne(data, no_dims=2, perplexity=50, theta=0.5, randseed=-1, verbose=False,initial_dims=50, use_pca=True, max_iter=1000):
+def run_bh_tsne(data, no_dims=2, perplexity=50, theta=0.5, randseed=-1, verbose=False,initial_dims=50, use_pca=True, max_iter=1000, init_data=None):
     '''
     Run TSNE based on the Barnes-HT algorithm
 
@@ -195,6 +202,8 @@ def run_bh_tsne(data, no_dims=2, perplexity=50, theta=0.5, randseed=-1, verbose=
     verbose: boolean
     use_pca: boolean
     max_iter: int
+    init_data: file or numpy.array or None
+        The data used to initialize TSNE, one sample per row
     '''
 
     # bh_tsne works with fixed input and output paths, give it a temporary
@@ -206,7 +215,9 @@ def run_bh_tsne(data, no_dims=2, perplexity=50, theta=0.5, randseed=-1, verbose=
     if child_pid == 0:
         if isinstance(data, file):
             data = load_data(data)
-        init_bh_tsne(data, tmp_dir_path, no_dims=no_dims, perplexity=perplexity, theta=theta, randseed=randseed,verbose=verbose, initial_dims=initial_dims, use_pca=use_pca, max_iter=max_iter)
+        if isinstance(init_data, file):
+            init_data = load_data(init_data)
+        init_bh_tsne(data, tmp_dir_path, no_dims=no_dims, perplexity=perplexity, theta=theta, randseed=randseed,verbose=verbose, initial_dims=initial_dims, use_pca=use_pca, max_iter=max_iter, init_data=init_data)
         sys.exit(0)
     else:
         os.waitpid(child_pid, 0)
@@ -224,7 +235,7 @@ def main(args):
     argp = _argparse().parse_args(args[1:])
     
     for result in run_bh_tsne(argp.input, no_dims=argp.no_dims, perplexity=argp.perplexity, theta=argp.theta, randseed=argp.randseed,
-            verbose=argp.verbose, initial_dims=argp.initial_dims, use_pca=argp.use_pca, max_iter=argp.max_iter):
+            verbose=argp.verbose, initial_dims=argp.initial_dims, use_pca=argp.use_pca, max_iter=argp.max_iter, init_data=argp.init):
         fmt = ''
         for i in range(1, len(result)):
             fmt = fmt + '{}\t'
