@@ -64,7 +64,8 @@ void TSNE::run(double* X, int N, int D, double* Y, int no_dims, double perplexit
 
     // Determine whether we are using an exact algorithm
     if(N - 1 < 3 * perplexity) { printf("Perplexity too large for the number of data points!\n"); exit(1); }
-    printf("Using no_dims = %d, perplexity = %f, and theta = %f\n", no_dims, perplexity, theta);
+    printf("Using no_dims = %d, perplexity = %f, theta = %f, max_iter = %d, stop_lying_iter = %d, and mom_switch_iter = %d\n",
+            no_dims, perplexity, theta, max_iter, stop_lying_iter, mom_switch_iter);
     bool exact = (theta == .0) ? true : false;
 
     // Set learning parameters
@@ -694,7 +695,7 @@ double TSNE::randn() {
 
 // Function that loads data from a t-SNE file
 // Note: this function does a malloc that should be freed elsewhere
-bool TSNE::load_data(double** data, int* n, int* d, int* no_dims, double* theta, double* perplexity, int* rand_seed, int* max_iter, double** Y, bool* skip_random_init) {
+bool TSNE::load_data(double** data, int* n, int* d, int* no_dims, double* theta, double* perplexity, int* rand_seed, int* max_iter, double** Y, bool* skip_random_init, int* stop_lying_iter, int* mom_switch_iter) {
 
 	// Open file, read first 2 integers, allocate memory, and read the data
     FILE *h;
@@ -711,16 +712,24 @@ bool TSNE::load_data(double** data, int* n, int* d, int* no_dims, double* theta,
 	*data = (double*) malloc(*d * *n * sizeof(double));
     if(*data == NULL) { printf("Memory allocation failed!\n"); exit(1); }
     fread(*data, sizeof(double), *n * *d, h);                               // the data
+    fread(stop_lying_iter, sizeof(int), 1, h);                              // iteration number to stop lying about P
+    fread(mom_switch_iter, sizeof(int), 1, h);                              // iteration number to set momentum into final value
     if(!feof(h)) fread(rand_seed, sizeof(int), 1, h);                       // random seed
 	fclose(h);
 	printf("Read the %i x %i data matrix successfully!\n", *n, *d);
     *Y = (double*) malloc(*n * *no_dims * sizeof(double));
     if(*Y == NULL) { printf("Memory allocation failed!\n"); exit(1); }
     if((h = fopen("init.dat", "r+b")) == NULL) {
-        printf("Error: could not open file init.dat\n");
+        printf("Could not open file init.dat. Using random initialization.\n");
         *skip_random_init = false;
+        *stop_lying_iter = 250;
+        *mom_switch_iter = 250;
     } else {
-        fread(*Y, sizeof(double), *n * *no_dims, h);                            // initialization
+        size_t loaded = fread(*Y, sizeof(double), *n * *no_dims, h);        // initialization
+        if(loaded != *n * *no_dims) {
+            printf("ERROR: Loaded initialization sample count %i doesn't match expected %i!", loaded, *n * *no_dims);
+            exit(1);
+        }
         fclose(h);
         printf("Read the %i x %i init matrix successfully!\n", *n, *no_dims);
         *skip_random_init = true;
@@ -751,7 +760,7 @@ void TSNE::save_data(double* data, int* landmarks, double* costs, int n, int d) 
 int main() {
 
     // Define some variables
-	int origN, N, D, no_dims, max_iter, *landmarks;
+	int origN, N, D, no_dims, max_iter, *landmarks, stop_lying_iter, mom_switch_iter;
 	double perc_landmarks;
 	double perplexity, theta, *data, *Y;
     int rand_seed = -1;
@@ -759,7 +768,7 @@ int main() {
     TSNE* tsne = new TSNE();
 
     // Read the parameters and the dataset
-	if(tsne->load_data(&data, &origN, &D, &no_dims, &theta, &perplexity, &rand_seed, &max_iter, &Y, &skip_random_init)) {
+	if(tsne->load_data(&data, &origN, &D, &no_dims, &theta, &perplexity, &rand_seed, &max_iter, &Y, &skip_random_init, &stop_lying_iter, &mom_switch_iter)) {
 
 		// Make dummy landmarks
         N = origN;
@@ -771,7 +780,7 @@ int main() {
 		//double* Y = (double*) malloc(N * no_dims * sizeof(double));
 		double* costs = (double*) calloc(N, sizeof(double));
         if(Y == NULL || costs == NULL) { printf("Memory allocation failed!\n"); exit(1); }
-		tsne->run(data, N, D, Y, no_dims, perplexity, theta, rand_seed, skip_random_init, max_iter);
+		tsne->run(data, N, D, Y, no_dims, perplexity, theta, rand_seed, skip_random_init, max_iter, stop_lying_iter, mom_switch_iter);
 
 		// Save the results
 		tsne->save_data(Y, landmarks, costs, N, no_dims);
