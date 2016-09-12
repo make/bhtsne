@@ -67,6 +67,9 @@ DEFAULT_USE_PCA = True
 DEFAULT_MAX_ITERATIONS = 1000
 DEFAULT_STOP_LYING_ITER = 250
 DEFAULT_MOM_SWITCH_ITER = 250
+DEFAULT_LYING_FACTOR = 12.0
+DEFAULT_START_MOMENTUM = 0.5
+DEFAULT_FINAL_MOMENTUM = 0.8
 
 ###
 
@@ -91,6 +94,9 @@ def _argparse():
     argparse.add_argument('--init', type=FileType('r'))
     argparse.add_argument('--stop_lying_iter', type=int, default=DEFAULT_STOP_LYING_ITER)
     argparse.add_argument('--momentum_switch_iter', type=int, default=DEFAULT_MOM_SWITCH_ITER)
+    argparse.add_argument('--lying_factor', type=float, default=DEFAULT_MOM_SWITCH_ITER)
+    argparse.add_argument('--start_momentum', type=float, default=DEFAULT_MOM_SWITCH_ITER)
+    argparse.add_argument('--final_momentum', type=float, default=DEFAULT_MOM_SWITCH_ITER)
     return argparse
 
 
@@ -99,7 +105,7 @@ def _read_unpack(fmt, fh):
 
 def init_bh_tsne(samples, workdir, no_dims=DEFAULT_NO_DIMS, initial_dims=INITIAL_DIMENSIONS, perplexity=DEFAULT_PERPLEXITY,
             theta=DEFAULT_THETA, randseed=EMPTY_SEED, verbose=False, use_pca=DEFAULT_USE_PCA, max_iter=DEFAULT_MAX_ITERATIONS,
-            init_data=None, stop_lying_iter=250, mom_switch_iter=250):
+            init_data=None, stop_lying_iter=250, mom_switch_iter=250, lying_factor=12.0, start_momentum=0.5, final_momentum=0.8):
 
     if use_pca:
         samples = samples - np.mean(samples, axis=0)
@@ -129,7 +135,8 @@ def init_bh_tsne(samples, workdir, no_dims=DEFAULT_NO_DIMS, initial_dims=INITIAL
         # Then write the data
         for sample in samples:
             data_file.write(pack('{}d'.format(len(sample)), *sample))
-        data_file.write(pack('ii', stop_lying_iter, mom_switch_iter))
+        data_file.write(pack('iiddd', stop_lying_iter, mom_switch_iter, lying_factor, start_momentum, final_momentum))
+        print(stop_lying_iter, mom_switch_iter, lying_factor, start_momentum, final_momentum)
         # Write random seed if specified
         if randseed != EMPTY_SEED:
             data_file.write(pack('i', randseed))
@@ -192,7 +199,8 @@ def bh_tsne(workdir, verbose=False):
         # The last piece of data is the cost for each sample, we ignore it
         #read_unpack('{}d'.format(sample_count), output_file)
 
-def run_bh_tsne(data, no_dims=2, perplexity=50, theta=0.5, randseed=-1, verbose=False,initial_dims=50, use_pca=True, max_iter=1000, init_data=None, stop_lying_iter=250, mom_switch_iter=250):
+def run_bh_tsne(data, no_dims=2, perplexity=50, theta=0.5, randseed=-1, verbose=False,initial_dims=50, use_pca=True, max_iter=1000, init_data=None,
+                stop_lying_iter=250, mom_switch_iter=250, lying_factor=12.0, start_momentum=0.5, final_momentum=0.8):
     '''
     Run TSNE based on the Barnes-HT algorithm
 
@@ -212,6 +220,9 @@ def run_bh_tsne(data, no_dims=2, perplexity=50, theta=0.5, randseed=-1, verbose=
         The data used to initialize TSNE, one sample per row
     stop_lying_iter: int
     mom_switch_iter: int
+    lying_factor: float
+    start_momentum: float
+    final_momentum: float
     '''
 
     # bh_tsne works with fixed input and output paths, give it a temporary
@@ -226,7 +237,8 @@ def run_bh_tsne(data, no_dims=2, perplexity=50, theta=0.5, randseed=-1, verbose=
         if isinstance(init_data, file):
             init_data = load_data(init_data)
         init_bh_tsne(data, tmp_dir_path, no_dims=no_dims, perplexity=perplexity, theta=theta, randseed=randseed,verbose=verbose, initial_dims=initial_dims,
-                     use_pca=use_pca, max_iter=max_iter, init_data=init_data, stop_lying_iter=stop_lying_iter, mom_switch_iter=mom_switch_iter)
+                     use_pca=use_pca, max_iter=max_iter, init_data=init_data, stop_lying_iter=stop_lying_iter, mom_switch_iter=mom_switch_iter,
+                     lying_factor=lying_factor, start_momentum=start_momentum, final_momentum=final_momentum)
         sys.exit(0)
     else:
         os.waitpid(child_pid, 0)
@@ -245,7 +257,8 @@ def main(args):
     
     for result in run_bh_tsne(argp.input, no_dims=argp.no_dims, perplexity=argp.perplexity, theta=argp.theta, randseed=argp.randseed,
             verbose=argp.verbose, initial_dims=argp.initial_dims, use_pca=argp.use_pca, max_iter=argp.max_iter, init_data=argp.init,
-            stop_lying_iter=argp.stop_lying_iter, mom_switch_iter=argp.momentum_switch_iter):
+            stop_lying_iter=argp.stop_lying_iter, mom_switch_iter=argp.momentum_switch_iter,
+            lying_factor=argp.lying_factor, start_momentum=argp.start_momentum, final_momentum=argp.final_momentum):
         fmt = ''
         for i in range(1, len(result)):
             fmt = fmt + '{}\t'

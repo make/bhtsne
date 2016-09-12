@@ -49,7 +49,8 @@ using namespace std;
 
 // Perform t-SNE
 void TSNE::run(double* X, int N, int D, double* Y, int no_dims, double perplexity, double theta, int rand_seed,
-               bool skip_random_init, int max_iter, int stop_lying_iter, int mom_switch_iter) {
+               bool skip_random_init, int max_iter, int stop_lying_iter, int mom_switch_iter,
+               double lying_factor, double start_momentum, double final_momentum) {
 
     // Set random seed
     if (skip_random_init != true) {
@@ -64,13 +65,14 @@ void TSNE::run(double* X, int N, int D, double* Y, int no_dims, double perplexit
 
     // Determine whether we are using an exact algorithm
     if(N - 1 < 3 * perplexity) { printf("Perplexity too large for the number of data points!\n"); exit(1); }
-    printf("Using no_dims = %d, perplexity = %f, theta = %f, max_iter = %d, stop_lying_iter = %d, and mom_switch_iter = %d\n",
-            no_dims, perplexity, theta, max_iter, stop_lying_iter, mom_switch_iter);
+    printf("Using no_dims = %d, perplexity = %f, theta = %f, max_iter = %d, stop_lying_iter = %d, mom_switch_iter = %d, lying_factor = %f, start_momentum = %f and final_momentum = %f\n",
+            no_dims, perplexity, theta, max_iter, stop_lying_iter, mom_switch_iter, lying_factor, start_momentum, final_momentum);
     bool exact = (theta == .0) ? true : false;
 
     // Set learning parameters
     float total_time = .0;
-	double momentum = .5, final_momentum = .8;
+	//double momentum = .5, final_momentum = .8;
+    double momentum = start_momentum;
 	double eta = 200.0;
     long start_millis;
     float seconds;
@@ -137,8 +139,8 @@ void TSNE::run(double* X, int N, int D, double* Y, int no_dims, double perplexit
     seconds = secondsFrom(start_millis);
 
     // Lie about the P-values
-    if(exact) { for(int i = 0; i < N * N; i++)        P[i] *= 12.0; }
-    else {      for(int i = 0; i < row_P[N]; i++) val_P[i] *= 12.0; }
+    if(exact) { for(int i = 0; i < N * N; i++)        P[i] *= lying_factor; }
+    else {      for(int i = 0; i < row_P[N]; i++) val_P[i] *= lying_factor; }
 
 	// Initialize solution (randomly)
   if (skip_random_init != true) {
@@ -170,8 +172,8 @@ void TSNE::run(double* X, int N, int D, double* Y, int no_dims, double perplexit
 
         // Stop lying about the P-values after a while, and switch momentum
         if(iter == stop_lying_iter) {
-            if(exact) { for(int i = 0; i < N * N; i++)        P[i] /= 12.0; }
-            else      { for(int i = 0; i < row_P[N]; i++) val_P[i] /= 12.0; }
+            if(exact) { for(int i = 0; i < N * N; i++)        P[i] /= lying_factor; }
+            else      { for(int i = 0; i < row_P[N]; i++) val_P[i] /= lying_factor; }
         }
         if(iter == mom_switch_iter) momentum = final_momentum;
 
@@ -695,7 +697,9 @@ double TSNE::randn() {
 
 // Function that loads data from a t-SNE file
 // Note: this function does a malloc that should be freed elsewhere
-bool TSNE::load_data(double** data, int* n, int* d, int* no_dims, double* theta, double* perplexity, int* rand_seed, int* max_iter, double** Y, bool* skip_random_init, int* stop_lying_iter, int* mom_switch_iter) {
+bool TSNE::load_data(double** data, int* n, int* d, int* no_dims, double* theta, double* perplexity, int* rand_seed,
+        int* max_iter, double** Y, bool* skip_random_init, int* stop_lying_iter, int* mom_switch_iter,
+        double* lying_factor, double* start_momentum, double* final_momentum) {
 
 	// Open file, read first 2 integers, allocate memory, and read the data
     FILE *h;
@@ -714,6 +718,9 @@ bool TSNE::load_data(double** data, int* n, int* d, int* no_dims, double* theta,
     fread(*data, sizeof(double), *n * *d, h);                               // the data
     fread(stop_lying_iter, sizeof(int), 1, h);                              // iteration number to stop lying about P
     fread(mom_switch_iter, sizeof(int), 1, h);                              // iteration number to set momentum into final value
+    fread(lying_factor, sizeof(double), 1, h);                              // lying factor for P value
+    fread(start_momentum, sizeof(double), 1, h);                            // start momentum
+    fread(final_momentum, sizeof(double), 1, h);                            // final momentum
     if(!feof(h)) fread(rand_seed, sizeof(int), 1, h);                       // random seed
 	fclose(h);
 	printf("Read the %i x %i data matrix successfully!\n", *n, *d);
@@ -727,7 +734,7 @@ bool TSNE::load_data(double** data, int* n, int* d, int* no_dims, double* theta,
     } else {
         size_t loaded = fread(*Y, sizeof(double), *n * *no_dims, h);        // initialization
         if(loaded != *n * *no_dims) {
-            printf("ERROR: Loaded initialization sample count %i doesn't match expected %i!", loaded, *n * *no_dims);
+            printf("ERROR: Loaded initialization sample count %i doesn't match expected %i!", (int) loaded, *n * *no_dims);
             exit(1);
         }
         fclose(h);
@@ -763,12 +770,14 @@ int main() {
 	int origN, N, D, no_dims, max_iter, *landmarks, stop_lying_iter, mom_switch_iter;
 	double perc_landmarks;
 	double perplexity, theta, *data, *Y;
+	double lying_factor, start_momentum, final_momentum;
     int rand_seed = -1;
     bool skip_random_init;
     TSNE* tsne = new TSNE();
 
     // Read the parameters and the dataset
-	if(tsne->load_data(&data, &origN, &D, &no_dims, &theta, &perplexity, &rand_seed, &max_iter, &Y, &skip_random_init, &stop_lying_iter, &mom_switch_iter)) {
+	if(tsne->load_data(&data, &origN, &D, &no_dims, &theta, &perplexity, &rand_seed, &max_iter, &Y, &skip_random_init,
+	        &stop_lying_iter, &mom_switch_iter, &lying_factor, &start_momentum, &final_momentum)) {
 
 		// Make dummy landmarks
         N = origN;
@@ -780,7 +789,8 @@ int main() {
 		//double* Y = (double*) malloc(N * no_dims * sizeof(double));
 		double* costs = (double*) calloc(N, sizeof(double));
         if(Y == NULL || costs == NULL) { printf("Memory allocation failed!\n"); exit(1); }
-		tsne->run(data, N, D, Y, no_dims, perplexity, theta, rand_seed, skip_random_init, max_iter, stop_lying_iter, mom_switch_iter);
+		tsne->run(data, N, D, Y, no_dims, perplexity, theta, rand_seed, skip_random_init, max_iter, stop_lying_iter, mom_switch_iter,
+		        lying_factor, start_momentum, final_momentum);
 
 		// Save the results
 		tsne->save_data(Y, landmarks, costs, N, no_dims);
