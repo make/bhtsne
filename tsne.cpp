@@ -729,8 +729,6 @@ bool TSNE::load_data(double** data, int* n, int* d, int* no_dims, double* theta,
     if((h = fopen("init.dat", "r+b")) == NULL) {
         printf("Could not open file init.dat. Using random initialization.\n");
         *skip_random_init = false;
-        *stop_lying_iter = 250;
-        *mom_switch_iter = 250;
     } else {
         size_t loaded = fread(*Y, sizeof(double), *n * *no_dims, h);        // initialization
         if(loaded != *n * *no_dims) {
