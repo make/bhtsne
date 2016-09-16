@@ -755,19 +755,24 @@ bool TSNE::load_data(double** data, int* n, int* d, int* no_dims, double* theta,
 }
 
 // Function that saves map to a t-SNE file
-void TSNE::save_data(double* data, int* landmarks, double* costs, int n, int d) {
+void TSNE::save_data(double* data, int n, int d, int iter) {
 
 	// Open file, write first 2 integers and then the data
 	FILE *h;
-	if((h = fopen("result.dat", "w+b")) == NULL) {
-		printf("Error: could not open data file.\n");
-		return;
+	if(iter >= 0) {
+        char filename[20];
+        snprintf(filename, sizeof filename, "iter_%d.dat", iter);
+        h = fopen(filename, "w+b");
+	} else {
+        h = fopen("result.dat", "w+b");
 	}
+    if(h == NULL) {
+        printf("Error: could not open data file.\n");
+        return;
+    }
 	fwrite(&n, sizeof(int), 1, h);
 	fwrite(&d, sizeof(int), 1, h);
     fwrite(data, sizeof(double), n * d, h);
-	fwrite(landmarks, sizeof(int), n, h);
-    fwrite(costs, sizeof(double), n, h);
     fclose(h);
 	printf("Wrote the %i x %i data matrix successfully!\n", n, d);
 }
@@ -789,27 +794,20 @@ int main() {
 	if(tsne->load_data(&data, &origN, &D, &no_dims, &theta, &perplexity, &rand_seed, &max_iter, &Y, &skip_random_init,
 	        &stop_lying_iter, &mom_switch_iter, &lying_factor, &start_momentum, &final_momentum)) {
 
-		// Make dummy landmarks
         N = origN;
-        int* landmarks = (int*) malloc(N * sizeof(int));
-        if(landmarks == NULL) { printf("Memory allocation failed!\n"); exit(1); }
-        for(int n = 0; n < N; n++) landmarks[n] = n;
 
 		// Now fire up the SNE implementation
 		//double* Y = (double*) malloc(N * no_dims * sizeof(double));
-		double* costs = (double*) calloc(N, sizeof(double));
-        if(Y == NULL || costs == NULL) { printf("Memory allocation failed!\n"); exit(1); }
+        if(Y == NULL) { printf("Memory allocation failed!\n"); exit(1); }
 		tsne->run(data, N, D, Y, no_dims, perplexity, theta, rand_seed, skip_random_init, max_iter, stop_lying_iter, mom_switch_iter,
 		        lying_factor, start_momentum, final_momentum);
 
 		// Save the results
-		tsne->save_data(Y, landmarks, costs, N, no_dims);
+		tsne->save_data(Y, N, no_dims, -1);
 
         // Clean up the memory
 		free(data); data = NULL;
 		free(Y); Y = NULL;
-		free(costs); costs = NULL;
-		free(landmarks); landmarks = NULL;
     }
     delete(tsne);
 }

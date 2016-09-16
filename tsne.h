@@ -46,7 +46,7 @@ public:
              double lying_factor=12.0, double start_momentum=0.5, double final_momentum=0.8);
     bool load_data(double** data, int* n, int* d, int* no_dims, double* theta, double* perplexity, int* rand_seed, int* max_iter, double** Y, bool* skip_random_init,
             int* stop_lying_iter, int* mom_switch_iter, double* lying_factor, double* start_momentum, double* final_momentum);
-    void save_data(double* data, int* landmarks, double* costs, int n, int d);
+    void save_data(double* data, int n, int d, int iter);
     void symmetrizeMatrix(unsigned int** row_P, unsigned int** col_P, double** val_P, int N); // should be static!
 
 
