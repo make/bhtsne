@@ -227,7 +227,7 @@ def bh_tsne(workdir, verbose=False, iter_data_dir="iters_out"):
         #results = [(_read_unpack('i', output_file), e) for e in results]
         # Put the results in order and yield it
         #results.sort()
-        for _, result in results:
+        for result in results:
             yield result
         # The last piece of data is the cost for each sample, we ignore it
         #read_unpack('{}d'.format(sample_count), output_file)
