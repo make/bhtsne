@@ -142,6 +142,10 @@ void TSNE::run(double* X, int N, int D, double* Y, int no_dims, double perplexit
     if(exact) { for(int i = 0; i < N * N; i++)        P[i] *= lying_factor; }
     else {      for(int i = 0; i < row_P[N]; i++) val_P[i] *= lying_factor; }
 
+    double lying_decrease = 0;
+    if(stop_lying_iter > 0)
+        lying_decrease = (lying_factor - 1.0) / (double) stop_lying_iter;
+
 	// Initialize solution (randomly)
   if (skip_random_init != true) {
   	for(int i = 0; i < N * no_dims; i++) Y[i] = randn() * .0001;
@@ -169,6 +173,14 @@ void TSNE::run(double* X, int N, int D, double* Y, int no_dims, double perplexit
 
         // Make solution zero-mean
 		zeroMean(Y, N, no_dims);
+
+        if(iter < stop_lying_iter) {
+            if(exact) { for(int i = 0; i < N * N; i++)        P[i] /= lying_factor; }
+            else      { for(int i = 0; i < row_P[N]; i++) val_P[i] /= lying_factor; }
+            lying_factor -= lying_decrease;
+            if(exact) { for(int i = 0; i < N * N; i++)        P[i] *= lying_factor; }
+            else {      for(int i = 0; i < row_P[N]; i++) val_P[i] *= lying_factor; }
+        }
 
         // Stop lying about the P-values after a while, and switch momentum
         if(iter == stop_lying_iter) {
