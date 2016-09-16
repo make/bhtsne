@@ -203,6 +203,10 @@ void TSNE::run(double* X, int N, int D, double* Y, int no_dims, double perplexit
             }
             start_millis = millis();
         }
+
+        if(iter <= 100 || (iter <= 1000 && iter % 10 == 0) || iter % 50 == 0 ) {
+            save_data(Y, N, no_dims, iter);
+        }
     }
     seconds = secondsFrom(start_millis); total_time += seconds;
 
@@ -774,7 +778,8 @@ void TSNE::save_data(double* data, int n, int d, int iter) {
 	fwrite(&d, sizeof(int), 1, h);
     fwrite(data, sizeof(double), n * d, h);
     fclose(h);
-	printf("Wrote the %i x %i data matrix successfully!\n", n, d);
+    if(iter < 0)
+        printf("Wrote the %i x %i data matrix successfully!\n", n, d);
 }
 
 

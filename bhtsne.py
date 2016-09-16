@@ -48,7 +48,7 @@ from tempfile import mkdtemp
 from platform import system
 from os import devnull
 import numpy as np
-import os, sys
+import os, sys, time, glob
 
 ### Constants
 IS_WINDOWS = True if system() == 'Windows' else False
@@ -70,6 +70,7 @@ DEFAULT_MOM_SWITCH_ITER = 250
 DEFAULT_LYING_FACTOR = 12.0
 DEFAULT_START_MOMENTUM = 0.5
 DEFAULT_FINAL_MOMENTUM = 0.8
+DEFAULT_ITER_DATA_DIR = "iters_out"
 
 ###
 
@@ -97,6 +98,7 @@ def _argparse():
     argparse.add_argument('--lying_factor', type=float, default=DEFAULT_MOM_SWITCH_ITER)
     argparse.add_argument('--start_momentum', type=float, default=DEFAULT_MOM_SWITCH_ITER)
     argparse.add_argument('--final_momentum', type=float, default=DEFAULT_MOM_SWITCH_ITER)
+    argparse.add_argument('--iter_data_dir', type=str, default=DEFAULT_ITER_DATA_DIR)
     return argparse
 
 
@@ -167,7 +169,7 @@ def load_data(input_file):
     return np.asarray(samples, dtype='float64')
 
 
-def bh_tsne(workdir, verbose=False):
+def bh_tsne(workdir, verbose=False, iter_data_dir="iters_out"):
 
     # Call bh_tsne and let it do its thing
     with open(devnull, 'w') as dev_null:
@@ -175,6 +177,37 @@ def bh_tsne(workdir, verbose=False):
                 # bh_tsne is very noisy on stdout, tell it to use stderr
                 #   if it is to print any output
                 stdout=stderr if verbose else dev_null)
+        
+        # Wait until process terminates
+        print("Polling process")
+        try:
+            if os.path.exists(iter_data_dir):
+                rmtree(iter_data_dir)
+            os.mkdir(iter_data_dir)
+        except os.error, err:
+            print(err)
+        while bh_tsne_p.poll() is None:
+            files = os.listdir(workdir)
+            time.sleep(5)
+            files.sort()
+            for f in files:
+                if(f.startswith("iter_")):
+                    with open(path_join(workdir, f), 'rb') as iter_file:
+                        result_samples, result_dims = _read_unpack('ii', iter_file)
+                        results = [_read_unpack('{}d'.format(result_dims), iter_file) for _ in range(result_samples)]
+                        out_file_path = path_join(iter_data_dir, f.replace(".dat", ".csv"))
+                        with open(out_file_path, 'w') as output_file:
+                            for result in results:
+                                fmt = ''
+                                for i in range(1, len(result)):
+                                    fmt = fmt + '{}\t'
+                                fmt = fmt + '{}\n'
+                                output_file.write(fmt.format(*result))
+                        os.remove(path_join(workdir, f))
+                        #print(out_file_path)
+            
+            
+        print("Waiting process")
         bh_tsne_p.wait()
         assert not bh_tsne_p.returncode, ('ERROR: Call to bh_tsne exited '
                 'with a non-zero return code exit status, please ' +
@@ -191,16 +224,16 @@ def bh_tsne(workdir, verbose=False):
             for _ in range(result_samples)]
         # Now collect the landmark data so that we can return the data in
         #   the order it arrived
-        results = [(_read_unpack('i', output_file), e) for e in results]
+        #results = [(_read_unpack('i', output_file), e) for e in results]
         # Put the results in order and yield it
-        results.sort()
+        #results.sort()
         for _, result in results:
             yield result
         # The last piece of data is the cost for each sample, we ignore it
         #read_unpack('{}d'.format(sample_count), output_file)
 
 def run_bh_tsne(data, no_dims=2, perplexity=50, theta=0.5, randseed=-1, verbose=False,initial_dims=50, use_pca=True, max_iter=1000, init_data=None,
-                stop_lying_iter=250, mom_switch_iter=250, lying_factor=12.0, start_momentum=0.5, final_momentum=0.8):
+                stop_lying_iter=250, mom_switch_iter=250, lying_factor=12.0, start_momentum=0.5, final_momentum=0.8, iter_data_dir="iters_out"):
     '''
     Run TSNE based on the Barnes-HT algorithm
 
@@ -223,6 +256,7 @@ def run_bh_tsne(data, no_dims=2, perplexity=50, theta=0.5, randseed=-1, verbose=
     lying_factor: float
     start_momentum: float
     final_momentum: float
+    iter_data_dir: string
     '''
 
     # bh_tsne works with fixed input and output paths, give it a temporary
@@ -243,7 +277,7 @@ def run_bh_tsne(data, no_dims=2, perplexity=50, theta=0.5, randseed=-1, verbose=
     else:
         os.waitpid(child_pid, 0)
         res = []
-        for result in bh_tsne(tmp_dir_path, verbose):
+        for result in bh_tsne(tmp_dir_path, verbose, iter_data_dir):
             sample_res = []
             for r in result:
                 sample_res.append(r)
@@ -258,7 +292,8 @@ def main(args):
     for result in run_bh_tsne(argp.input, no_dims=argp.no_dims, perplexity=argp.perplexity, theta=argp.theta, randseed=argp.randseed,
             verbose=argp.verbose, initial_dims=argp.initial_dims, use_pca=argp.use_pca, max_iter=argp.max_iter, init_data=argp.init,
             stop_lying_iter=argp.stop_lying_iter, mom_switch_iter=argp.momentum_switch_iter,
-            lying_factor=argp.lying_factor, start_momentum=argp.start_momentum, final_momentum=argp.final_momentum):
+            lying_factor=argp.lying_factor, start_momentum=argp.start_momentum, final_momentum=argp.final_momentum,
+            iter_data_dir=argp.iter_data_dir):
         fmt = ''
         for i in range(1, len(result)):
             fmt = fmt + '{}\t'
