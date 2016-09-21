@@ -188,23 +188,27 @@ def bh_tsne(workdir, verbose=False, iter_data_dir="iters_out"):
             print(err)
         while bh_tsne_p.poll() is None:
             files = os.listdir(workdir)
-            time.sleep(5)
+            time.sleep(15)
             files.sort()
             for f in files:
                 if(f.startswith("iter_")):
-                    with open(path_join(workdir, f), 'rb') as iter_file:
-                        result_samples, result_dims = _read_unpack('ii', iter_file)
-                        results = [_read_unpack('{}d'.format(result_dims), iter_file) for _ in range(result_samples)]
-                        out_file_path = path_join(iter_data_dir, f.replace(".dat", ".csv"))
-                        with open(out_file_path, 'w') as output_file:
-                            for result in results:
-                                fmt = ''
-                                for i in range(1, len(result)):
-                                    fmt = fmt + '{}\t'
-                                fmt = fmt + '{}\n'
-                                output_file.write(fmt.format(*result))
-                        os.remove(path_join(workdir, f))
-                        #print(out_file_path)
+                    try:
+                        with open(path_join(workdir, f), 'rb') as iter_file:
+                            result_samples, result_dims = _read_unpack('ii', iter_file)
+                            results = [_read_unpack('{}d'.format(result_dims), iter_file) for _ in range(result_samples)]
+                            out_file_path = path_join(iter_data_dir, f.replace(".dat", ".csv"))
+                            with open(out_file_path, 'w') as output_file:
+                                for result in results:
+                                    fmt = ''
+                                    for i in range(1, len(result)):
+                                        fmt = fmt + '{}\t'
+                                    fmt = fmt + '{}\n'
+                                    output_file.write(fmt.format(*result))
+                            os.remove(path_join(workdir, f))
+                            #print(out_file_path)
+                    except err:
+                        print(path_join(workdir, f))
+                        print(err)
             
             
         print("Waiting process")
