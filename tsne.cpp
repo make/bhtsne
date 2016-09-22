@@ -478,7 +478,7 @@ void TSNE::computeGaussianPerplexity(double* X, int N, int D, unsigned int** _ro
     #pragma omp parallel for
     for(int t = 0; t < maxThreads; t++) {
         // Build ball tree on data set
-        VpTree<DataPoint, squared_euclidean_distance>* tree = new VpTree<DataPoint, squared_euclidean_distance>();
+        VpTree<DataPoint>* tree = new VpTree<DataPoint>();
         tree->create(obj_X);
         double* cur_P = (double*) malloc((N - 1) * sizeof(double));
         if(cur_P == NULL) {

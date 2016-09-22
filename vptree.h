@@ -100,7 +100,7 @@ double squared_euclidean_distance(const DataPoint &t1, const DataPoint &t2) {
 }
 
 
-template<typename T, double (*distance)( const T&, const T& )>
+template<typename T>
 class VpTree
 {
 public:
@@ -128,7 +128,7 @@ public:
         std::priority_queue<HeapItem> heap;
         
         // Variable that tracks the distance to the farthest point in our results
-        _tau = DBL_MAX;
+        _tauSq = DBL_MAX;
         
         // Perform the search
         search(_root, target, k, heap);
@@ -148,18 +148,19 @@ public:
     
 private:
     std::vector<T> _items;
-    double _tau;
+    double _tau, _tauSq;
     
     // Single node of a VP tree (has a point and radius; left children are closer to point than the radius)
     struct Node
     {
         int index;              // index of point in node
         double threshold;       // radius(?)
+        double thresholdSq;     // squared radius(?)
         Node* left;             // points closer by than threshold
         Node* right;            // points farther away than threshold
         
         Node() :
-        index(0), threshold(0.), left(0), right(0) {}
+        index(0), threshold(0.), thresholdSq(0.), left(0), right(0) {}
         
         ~Node() {               // destructor
             delete left;
@@ -185,7 +186,7 @@ private:
         const T& item;
         DistanceComparator(const T& item) : item(item) {}
         bool operator()(const T& a, const T& b) {
-            return distance(item, a) < distance(item, b);
+            return squared_euclidean_distance(item, a) < squared_euclidean_distance(item, b);
         }
     };
     
@@ -214,7 +215,8 @@ private:
                              DistanceComparator(_items[lower]));
             
             // Threshold of the new node will be the distance to the median
-            node->threshold = distance(_items[lower], _items[median]);
+            node->thresholdSq = squared_euclidean_distance(_items[lower], _items[median]);
+            node->threshold = sqrt(node->thresholdSq);
             
             // Recursively build tree
             node->index = lower;
@@ -232,13 +234,16 @@ private:
         if(node == NULL) return;     // indicates that we're done here
         
         // Compute distance between target and current node
-        double dist = distance(_items[node->index], target);
+        double dist = squared_euclidean_distance(_items[node->index], target);
 
         // If current node within radius tau
-        if(dist < _tau) {
+        if(dist < _tauSq) {
             if(heap.size() == k) heap.pop();                 // remove furthest node from result list (if we already have k results)
             heap.push(HeapItem(node->index, dist));           // add current node to result list
-            if(heap.size() == k) _tau = heap.top().dist;     // update value of tau (farthest point in result list)
+            if(heap.size() == k) {
+                _tauSq = heap.top().dist;     // update value of tau (farthest point in result list)
+                _tau = sqrt(_tauSq);
+            }
         }
         
         // Return if we arrived at a leaf
@@ -247,22 +252,16 @@ private:
         }
         
         // If the target lies within the radius of ball
-        if(dist < node->threshold) {
-            if(dist - _tau <= node->threshold) {         // if there can still be neighbors inside the ball, recursively search left child first
-                search(node->left, target, k, heap);
-            }
-            
-            if(dist + _tau >= node->threshold) {         // if there can still be neighbors outside the ball, recursively search right child
+        if(dist < node->thresholdSq) {
+            search(node->left, target, k, heap);
+            if(dist + _tauSq >= node->thresholdSq || dist >= pow(node->threshold - _tau, 2)) {
                 search(node->right, target, k, heap);
             }
         
         // If the target lies outsize the radius of the ball
         } else {
-            if(dist + _tau >= node->threshold) {         // if there can still be neighbors outside the ball, recursively search right child first
-                search(node->right, target, k, heap);
-            }
-            
-            if (dist - _tau <= node->threshold) {         // if there can still be neighbors inside the ball, recursively search left child
+            search(node->right, target, k, heap);
+            if(dist - _tauSq <= node->thresholdSq || pow(_tau + node->threshold, 2) >= dist) {         // if there can still be neighbors inside the ball, recursively search left child
                 search(node->left, target, k, heap);
             }
         }
