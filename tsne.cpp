@@ -139,79 +139,81 @@ void TSNE::run(double* X, int N, int D, double* Y, int no_dims, double perplexit
         for(int i = 0; i < row_P[N]; i++) sum_P += val_P[i];
         for(int i = 0; i < row_P[N]; i++) val_P[i] /= sum_P;
     }
-    seconds = secondsFrom(start_millis);
+    for(int j = 0; j < 10; j++) {
+        seconds = secondsFrom(start_millis);
 
-    // Lie about the P-values
-    if(exact) { for(int i = 0; i < N * N; i++)        P[i] *= lying_factor; }
-    else {      for(int i = 0; i < row_P[N]; i++) val_P[i] *= lying_factor; }
+        // Lie about the P-values
+        if(exact) { for(int i = 0; i < N * N; i++)        P[i] *= lying_factor; }
+        else {      for(int i = 0; i < row_P[N]; i++) val_P[i] *= lying_factor; }
 
-    double lying_decrease = 0;
-    if(stop_lying_iter > 0)
-        lying_decrease = (lying_factor - 1.0) / (double) stop_lying_iter;
+        double lying_decrease = 0;
+        if(stop_lying_iter > 0)
+            lying_decrease = (lying_factor - 1.0) / (double) stop_lying_iter;
 
-	// Initialize solution (randomly)
-  if (skip_random_init != true) {
-  	for(int i = 0; i < N * no_dims; i++) Y[i] = randn() * .0001;
-  }
-
-	// Perform main training loop
-    if(exact) printf("Input similarities computed in %4.2f seconds!\nLearning embedding...\n", seconds);
-    else printf("Input similarities computed in %4.2f seconds (sparsity = %f)!\nLearning embedding...\n", seconds, (double) row_P[N] / ((double) N * (double) N));
-    start_millis = millis();
-    double squared_inv_theta = 1.0 / (theta * theta);
-
-	for(int iter = 0; iter < max_iter; iter++) {
-
-        // Compute (approximate) gradient
-        if(exact) computeExactGradient(P, Y, N, no_dims, dY);
-        else computeGradient(P, row_P, col_P, val_P, Y, N, no_dims, dY, squared_inv_theta);
-
-        // Update gains
-        for(int i = 0; i < N * no_dims; i++) gains[i] = (sign(dY[i]) != sign(uY[i])) ? (gains[i] + .2) : (gains[i] * .8);
-        for(int i = 0; i < N * no_dims; i++) if(gains[i] < .01) gains[i] = .01;
-
-        // Perform gradient update (with momentum and gains)
-        for(int i = 0; i < N * no_dims; i++) uY[i] = momentum * uY[i] - eta * gains[i] * dY[i];
-		for(int i = 0; i < N * no_dims; i++)  Y[i] = Y[i] + uY[i];
-
-        // Make solution zero-mean
-		zeroMean(Y, N, no_dims);
-
-        if(iter < stop_lying_iter) {
-            if(exact) { for(int i = 0; i < N * N; i++)        P[i] /= lying_factor; }
-            else      { for(int i = 0; i < row_P[N]; i++) val_P[i] /= lying_factor; }
-            lying_factor -= lying_decrease;
-            if(exact) { for(int i = 0; i < N * N; i++)        P[i] *= lying_factor; }
-            else {      for(int i = 0; i < row_P[N]; i++) val_P[i] *= lying_factor; }
+        // Initialize solution (randomly)
+        if (skip_random_init != true) {
+            for(int i = 0; i < N * no_dims; i++) Y[i] = randn() * .0001;
         }
 
-        // Stop lying about the P-values after a while, and switch momentum
-        if(iter == stop_lying_iter) {
-            if(exact) { for(int i = 0; i < N * N; i++)        P[i] /= lying_factor; }
-            else      { for(int i = 0; i < row_P[N]; i++) val_P[i] /= lying_factor; }
-        }
-        if(iter == mom_switch_iter) momentum = final_momentum;
+        // Perform main training loop
+        if(exact) printf("Input similarities computed in %4.2f seconds!\nLearning embedding...\n", seconds);
+        else printf("Input similarities computed in %4.2f seconds (sparsity = %f)!\nLearning embedding...\n", seconds, (double) row_P[N] / ((double) N * (double) N));
+        start_millis = millis();
+        double squared_inv_theta = 1.0 / (theta * theta);
 
-        // Print out progress
-        if (iter > 0 && (iter % 50 == 0 || iter == max_iter - 1)) {
-            seconds = secondsFrom(start_millis);
-            double C = .0;
-            if(exact) C = evaluateError(P, Y, N, no_dims);
-            else      C = evaluateError(row_P, col_P, val_P, Y, N, no_dims, squared_inv_theta);  // doing approximate computation here!
-            if(iter == 0)
-                printf("Iteration %d: error is %f\n", iter + 1, C);
-            else {
-                total_time += seconds;
-                printf("Iteration %d: error is %f (50 iterations in %4.2f seconds)\n", iter, C, seconds);
+        for(int iter = 0; iter < max_iter; iter++) {
+
+            // Compute (approximate) gradient
+            if(exact) computeExactGradient(P, Y, N, no_dims, dY);
+            else computeGradient(P, row_P, col_P, val_P, Y, N, no_dims, dY, squared_inv_theta);
+
+            // Update gains
+            for(int i = 0; i < N * no_dims; i++) gains[i] = (sign(dY[i]) != sign(uY[i])) ? (gains[i] + .2) : (gains[i] * .8);
+            for(int i = 0; i < N * no_dims; i++) if(gains[i] < .01) gains[i] = .01;
+
+            // Perform gradient update (with momentum and gains)
+            for(int i = 0; i < N * no_dims; i++) uY[i] = momentum * uY[i] - eta * gains[i] * dY[i];
+            for(int i = 0; i < N * no_dims; i++)  Y[i] = Y[i] + uY[i];
+
+            // Make solution zero-mean
+            zeroMean(Y, N, no_dims);
+
+            if(iter < stop_lying_iter) {
+                if(exact) { for(int i = 0; i < N * N; i++)        P[i] /= lying_factor; }
+                else      { for(int i = 0; i < row_P[N]; i++) val_P[i] /= lying_factor; }
+                lying_factor -= lying_decrease;
+                if(exact) { for(int i = 0; i < N * N; i++)        P[i] *= lying_factor; }
+                else {      for(int i = 0; i < row_P[N]; i++) val_P[i] *= lying_factor; }
             }
-            start_millis = millis();
-        }
 
-        if(iter <= 100 || (iter <= 1000 && iter % 10 == 0) || iter % 50 == 0 ) {
-            save_data(Y, N, no_dims, iter);
+            // Stop lying about the P-values after a while, and switch momentum
+            if(iter == stop_lying_iter) {
+                if(exact) { for(int i = 0; i < N * N; i++)        P[i] /= lying_factor; }
+                else      { for(int i = 0; i < row_P[N]; i++) val_P[i] /= lying_factor; }
+            }
+            if(iter == mom_switch_iter) momentum = final_momentum;
+
+            // Print out progress
+            if (iter > 0 && (iter % 50 == 0 || iter == max_iter - 1)) {
+                seconds = secondsFrom(start_millis);
+                double C = .0;
+                if(exact) C = evaluateError(P, Y, N, no_dims);
+                else      C = evaluateError(row_P, col_P, val_P, Y, N, no_dims, squared_inv_theta);  // doing approximate computation here!
+                if(iter == 0)
+                    printf("Iteration %d: error is %f\n", iter + 1, C);
+                else {
+                    total_time += seconds;
+                    printf("Iteration %d: error is %f (50 iterations in %4.2f seconds)\n", iter, C, seconds);
+                }
+                start_millis = millis();
+            }
+
+            if(iter <= 100 || (iter <= 1000 && iter % 10 == 0) || iter % 50 == 0 ) {
+                save_data(Y, N, no_dims, iter);
+            }
         }
+        seconds = secondsFrom(start_millis); total_time += seconds;
     }
-    seconds = secondsFrom(start_millis); total_time += seconds;
 
     // Clean up memory
     free(dY);
@@ -224,6 +226,7 @@ void TSNE::run(double* X, int N, int D, double* Y, int no_dims, double perplexit
         free(val_P); val_P = NULL;
     }
     printf("Fitting performed in %4.2f seconds.\n", total_time);
+
 }
 
 long TSNE::millis() {
