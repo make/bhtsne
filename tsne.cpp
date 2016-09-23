@@ -139,8 +139,9 @@ void TSNE::run(double* X, int N, int D, double* Y, int no_dims, double perplexit
         for(int i = 0; i < row_P[N]; i++) sum_P += val_P[i];
         for(int i = 0; i < row_P[N]; i++) val_P[i] /= sum_P;
     }
+    seconds = secondsFrom(start_millis);
     for(int j = 0; j < 10; j++) {
-        seconds = secondsFrom(start_millis);
+        double dynamic_lying_factor = lying_factor;
 
         // Lie about the P-values
         if(exact) { for(int i = 0; i < N * N; i++)        P[i] *= lying_factor; }
@@ -179,17 +180,17 @@ void TSNE::run(double* X, int N, int D, double* Y, int no_dims, double perplexit
             zeroMean(Y, N, no_dims);
 
             if(iter < stop_lying_iter) {
-                if(exact) { for(int i = 0; i < N * N; i++)        P[i] /= lying_factor; }
-                else      { for(int i = 0; i < row_P[N]; i++) val_P[i] /= lying_factor; }
-                lying_factor -= lying_decrease;
-                if(exact) { for(int i = 0; i < N * N; i++)        P[i] *= lying_factor; }
-                else {      for(int i = 0; i < row_P[N]; i++) val_P[i] *= lying_factor; }
+                if(exact) { for(int i = 0; i < N * N; i++)        P[i] /= dynamic_lying_factor; }
+                else      { for(int i = 0; i < row_P[N]; i++) val_P[i] /= dynamic_lying_factor; }
+                dynamic_lying_factor -= lying_decrease;
+                if(exact) { for(int i = 0; i < N * N; i++)        P[i] *= dynamic_lying_factor; }
+                else {      for(int i = 0; i < row_P[N]; i++) val_P[i] *= dynamic_lying_factor; }
             }
 
             // Stop lying about the P-values after a while, and switch momentum
             if(iter == stop_lying_iter) {
-                if(exact) { for(int i = 0; i < N * N; i++)        P[i] /= lying_factor; }
-                else      { for(int i = 0; i < row_P[N]; i++) val_P[i] /= lying_factor; }
+                if(exact) { for(int i = 0; i < N * N; i++)        P[i] /= dynamic_lying_factor; }
+                else      { for(int i = 0; i < row_P[N]; i++) val_P[i] /= dynamic_lying_factor; }
             }
             if(iter == mom_switch_iter) momentum = final_momentum;
 
@@ -208,8 +209,14 @@ void TSNE::run(double* X, int N, int D, double* Y, int no_dims, double perplexit
                 start_millis = millis();
             }
 
-            if(iter <= 100 || (iter <= 1000 && iter % 10 == 0) || iter % 50 == 0 ) {
-                save_data(Y, N, no_dims, iter);
+            int realiter = iter + j * max_iter;
+            if(
+                    realiter <= 50 ||
+                    (iter <= stop_lying_iter && realiter % 5 == 0) ||
+                    (realiter <= 1000 && realiter % 10 == 0) ||
+                    realiter % 50 == 0
+            ) {
+                save_data(Y, N, no_dims, iter + j * max_iter);
             }
         }
         seconds = secondsFrom(start_millis); total_time += seconds;
