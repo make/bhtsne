@@ -129,7 +129,7 @@ public:
         
         // Variable that tracks the distance to the farthest point in our results
         _tauSq = DBL_MAX;
-        
+        _isTauUpdated = false;
         // Perform the search
         search(_root, target, k, heap);
         
@@ -149,6 +149,7 @@ public:
 private:
     std::vector<T> _items;
     double _tau, _tauSq;
+    bool _isTauUpdated;
     
     // Single node of a VP tree (has a point and radius; left children are closer to point than the radius)
     struct Node
@@ -242,7 +243,7 @@ private:
             heap.push(HeapItem(node->index, dist));           // add current node to result list
             if(heap.size() == k) {
                 _tauSq = heap.top().dist;     // update value of tau (farthest point in result list)
-                _tau = sqrt(_tauSq);
+                _isTauUpdated = false;
             }
         }
         
@@ -254,15 +255,31 @@ private:
         // If the target lies within the radius of ball
         if(dist < node->thresholdSq) {
             search(node->left, target, k, heap);
-            if(dist + _tauSq >= node->thresholdSq || dist >= pow(node->threshold - _tau, 2)) {
+            if(dist + _tauSq >= node->thresholdSq) {
                 search(node->right, target, k, heap);
+            } else {
+                if(!_isTauUpdated) {
+                    _tau = sqrt(_tauSq);
+                    _isTauUpdated = true;
+                }
+                if(dist >= (node->threshold - _tau) * (node->threshold - _tau)) {
+                    search(node->right, target, k, heap);
+                }
             }
         
         // If the target lies outsize the radius of the ball
         } else {
             search(node->right, target, k, heap);
-            if(dist - _tauSq <= node->thresholdSq || pow(_tau + node->threshold, 2) >= dist) {         // if there can still be neighbors inside the ball, recursively search left child
+            if(dist - _tauSq <= node->thresholdSq) {         // if there can still be neighbors inside the ball, recursively search left child
                 search(node->left, target, k, heap);
+            } else {
+                if(!_isTauUpdated) {
+                    _tau = sqrt(_tauSq);
+                    _isTauUpdated = true;
+                }
+                if((_tau + node->threshold) * (_tau + node->threshold) >= dist) {
+                    search(node->right, target, k, heap);
+                }
             }
         }
     }
