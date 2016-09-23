@@ -127,8 +127,11 @@ void TSNE::run(double* X, int N, int D, double* Y, int no_dims, double perplexit
     // Compute input similarities for approximate t-SNE
     else {
 
-        // Compute asymmetric pairwise input similarities
-        computeGaussianPerplexity(X, N, D, &row_P, &col_P, &val_P, perplexity, (int) (3 * perplexity));
+        if(!load_knn(&row_P, &col_P, &val_P, N, (int) (3 * perplexity), D)) {
+            // Compute asymmetric pairwise input similarities
+            computeGaussianPerplexity(X, N, D, &row_P, &col_P, &val_P, perplexity, (int) (3 * perplexity));
+            save_knn(row_P, col_P, val_P, N, (int) (3 * perplexity), D);
+        }
 
         // Symmetrize input similarities
         symmetrizeMatrix(&row_P, &col_P, &val_P, N);
@@ -780,6 +783,66 @@ void TSNE::save_data(double* data, int n, int d, int iter) {
     fclose(h);
     if(iter < 0)
         printf("Wrote the %i x %i data matrix successfully!\n", n, d);
+}
+
+bool TSNE::load_knn(unsigned int** _row_P, unsigned int** _col_P, double** _val_P, int N, int K, int D) {
+
+    FILE *h;
+    char filename[60];
+    snprintf(filename, sizeof filename, "/tmp/bhtsne_knn_%d.dat", N);
+    h = fopen(filename, "r+b");
+    if(h == NULL) {
+        printf("Error: could not open gaussian cache file.\n");
+        return false;
+    }
+    int n;
+    int k;
+    int d;
+    fread(&n, sizeof(int), 1, h);
+    fread(&k, sizeof(int), 1, h);
+    fread(&d, sizeof(int), 1, h);
+    bool success = false;
+    if(n == N && d == D && k == K) {
+        *_row_P = (unsigned int*)    malloc((N + 1) * sizeof(unsigned int));
+        *_col_P = (unsigned int*)    calloc(N * K, sizeof(unsigned int));
+        *_val_P = (double*) calloc(N * K, sizeof(double));
+        fread(*_row_P, sizeof(unsigned int), N + 1, h);
+        fread(*_col_P, sizeof(unsigned int), N * K, h);
+        fread(*_val_P, sizeof(double), N * K, h);
+        if(*_row_P == NULL || *_val_P == NULL || *_col_P == NULL) {
+            printf("Failed to read gaussian cache file!\n");
+        } else {
+            printf("Successfully loaded gaussian cache file!\n");
+            success = true;
+        }
+    } else {
+        printf("Invalid N = %d, K = %d or D = %d!\n", n, k, d);
+        printf("Should be N = %d, K = %d or D = %d\n", N, K, D);
+    }
+    fclose(h);
+    return success;
+}
+
+// Function that caches knn matrix to speed up developing
+void TSNE::save_knn(unsigned int* _row_P, unsigned int* _col_P, double* _val_P, int N, int K, int D) {
+
+    FILE *h;
+    char filename[60];
+    snprintf(filename, sizeof filename, "/tmp/bhtsne_knn_%d.dat", N);
+    h = fopen(filename, "w+b");
+    if(h == NULL) {
+        printf("Error: could not open file for gaussian cache.\n");
+        return;
+    }
+    fwrite(&N, sizeof(int), 1, h);
+    fwrite(&K, sizeof(int), 1, h);
+    fwrite(&D, sizeof(int), 1, h);
+    fwrite(_row_P, sizeof(unsigned int), N + 1, h);
+    fwrite(_col_P, sizeof(unsigned int), N * K, h);
+    fwrite(_val_P, sizeof(double), N * K, h);
+
+    fclose(h);
+    printf("Wrote the %i x %i gaussian perplexity matrix successfully!\n", N, K);
 }
 
 

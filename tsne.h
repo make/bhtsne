@@ -47,6 +47,8 @@ public:
     bool load_data(double** data, int* n, int* d, int* no_dims, double* theta, double* perplexity, int* rand_seed, int* max_iter, double** Y, bool* skip_random_init,
             int* stop_lying_iter, int* mom_switch_iter, double* lying_factor, double* start_momentum, double* final_momentum);
     void save_data(double* data, int n, int d, int iter);
+    bool load_knn(unsigned int** row_P, unsigned int** col_P, double** val_P, int N, int K, int D);
+    void save_knn(unsigned int* row_P, unsigned int* col_P, double* val_P, int N, int K, int D);
     void symmetrizeMatrix(unsigned int** row_P, unsigned int** col_P, double** val_P, int N); // should be static!
 
 
