@@ -140,6 +140,7 @@ void TSNE::run(double* X, int N, int D, double* Y, int no_dims, double perplexit
         for(int i = 0; i < row_P[N]; i++) val_P[i] /= sum_P;
     }
     seconds = secondsFrom(start_millis);
+    SPTree* tree;
     for(int j = 0; j < 10; j++) {
         double dynamic_lying_factor = lying_factor;
 
@@ -166,7 +167,15 @@ void TSNE::run(double* X, int N, int D, double* Y, int no_dims, double perplexit
 
             // Compute (approximate) gradient
             if(exact) computeExactGradient(P, Y, N, no_dims, dY);
-            else computeGradient(P, row_P, col_P, val_P, Y, N, no_dims, dY, squared_inv_theta);
+            else {
+                // Approximate sptree by rebuilding it on each fifth iter only
+                if(iter < stop_lying_iter || iter % 5 == 0) {
+                    if(iter > 0)
+                        delete tree;
+                    tree = new SPTree(no_dims, Y, N);
+                }
+                computeGradient(P, row_P, col_P, val_P, Y, N, no_dims, dY, squared_inv_theta, tree);
+            }
 
             // Update gains
             for(int i = 0; i < N * no_dims; i++) gains[i] = (sign(dY[i]) != sign(uY[i])) ? (gains[i] + .2) : (gains[i] * .8);
@@ -247,11 +256,8 @@ float TSNE::secondsFrom(long start_millis) {
 }
 
 // Compute gradient of the t-SNE cost function (using Barnes-Hut algorithm)
-void TSNE::computeGradient(double* P, unsigned int* inp_row_P, unsigned int* inp_col_P, double* inp_val_P, double* Y, int N, int D, double* dC, double squared_inv_theta)
+void TSNE::computeGradient(double* P, unsigned int* inp_row_P, unsigned int* inp_col_P, double* inp_val_P, double* Y, int N, int D, double* dC, double squared_inv_theta, SPTree* tree)
 {
-
-    // Construct space-partitioning tree on current map
-    SPTree* tree = new SPTree(D, Y, N);
 
     // Compute all terms required for t-SNE gradient
     double sum_Q = .0;
@@ -268,7 +274,6 @@ void TSNE::computeGradient(double* P, unsigned int* inp_row_P, unsigned int* inp
     }
     free(pos_f);
     free(neg_f);
-    delete tree;
 }
 
 // Compute gradient of the t-SNE cost function (exact)
